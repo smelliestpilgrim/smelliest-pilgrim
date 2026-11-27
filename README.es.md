@@ -19,7 +19,7 @@ Nació en el Camino y sirve para cualquier ruta larga.
 <img src="docs/screens/4-memo-start.png" width="180" alt="Pantalla de inicio: MEMO, grabando en 2 s, SEND">
 <img src="docs/screens/3-recording.png" width="180" alt="Grabando, con cronómetro y estado del GPS">
 <img src="docs/screens/2-waiting-gps.png" width="180" alt="Nota guardada, esperando al GPS">
-<img src="docs/screens/1-send-all-new-name-mockup.png" width="180" alt="Página de envío: 2 por enviar, SEND ALL">
+<img src="docs/screens/1-send-all.png" width="180" alt="Página de envío: 3 por enviar, SEND ALL">
 </p>
 
 (La interfaz del reloj está en inglés.)

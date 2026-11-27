@@ -15,7 +15,7 @@
 // A memo only counts as saved when every byte arrived and size + CRC-32 match
 // what the watch computed, exactly as on the phone.
 
-const VERSION = '0.2.0-server'
+const VERSION = '0.3.0-server'
 const MAX_CHUNK_BYTES = 48 * 1024
 const MAX_MEMO_BYTES = 32 * 1024 * 1024
 const MAX_CHUNKS = 16384
@@ -109,7 +109,7 @@ async function bodyText(request) {
 async function ping(env) {
   const today = dayOf(localParts(Date.now(), NaN, env.TIMEZONE))
   const r = await env.DB.prepare('SELECT count(*) AS n FROM memos WHERE day = ?').bind(today).first()
-  return ok({ today: (r && r.n) || 0, app: 'WatchMemo', ver: VERSION, server: true, offsets: true, maxChunk: MAX_CHUNK_BYTES })
+  return ok({ today: (r && r.n) || 0, app: 'Smelliest Pilgrim', protocol: 'WatchMemo', ver: VERSION, server: true, offsets: true, maxChunk: MAX_CHUNK_BYTES })
 }
 
 async function chunk(request, env, q) {

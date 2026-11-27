@@ -1,12 +1,12 @@
 {
   "configVersion": "v3",
   "app": {
-    "appId": 1100002,
+    "appId": 1138450,
     "appName": "Smelliest Pilgrim",
     "appType": "app",
     "version": {
-      "code": 7,
-      "name": "0.2.1"
+      "code": 8,
+      "name": "0.3.0"
     },
     "icon": "icon.png",
     "vender": "smilingpilgrim",

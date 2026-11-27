@@ -24,7 +24,7 @@ import { sendAll, sendText, requestWithTimeout, linkHint, linkKind } from '../ut
 import { PING_TIMEOUT_MS, CHUNK_SIZES, DEFAULT_CHUNK, chunkLabel } from '../utils/protocol'
 import { blog, logBytes } from '../utils/blog'
 
-const VERSION = '0.2.1' // local const only: page files must never export
+const VERSION = '0.3.0' // local const only: page files must never export
 const WHITE = 0xffffff
 const GREY = 0xb0b0b0
 const BTN = 0x1f5fbf

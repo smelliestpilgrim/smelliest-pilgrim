@@ -17,7 +17,7 @@ It was made on the Camino and works for any long trail.
 <img src="docs/screens/4-memo-start.png" width="180" alt="Start screen: MEMO, recording in 2 s, SEND">
 <img src="docs/screens/3-recording.png" width="180" alt="Recording screen with timer and GPS status">
 <img src="docs/screens/2-waiting-gps.png" width="180" alt="Memo saved, waiting for a GPS fix">
-<img src="docs/screens/1-send-all-new-name-mockup.png" width="180" alt="Send page: 2 to send, SEND ALL">
+<img src="docs/screens/1-send-all.png" width="180" alt="Send page: 3 to send, SEND ALL">
 </p>
 
 ## What it does

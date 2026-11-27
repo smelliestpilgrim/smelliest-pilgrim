@@ -43,7 +43,7 @@ import { blog } from '../utils/blog'
 // NOTE: never `export` anything from a page file. The bundler then emits
 // `exports.X = ...`, and `exports` does not exist on the watch: the page dies
 // before Page() registers (0.1.1 black-screen bug).
-const VERSION = '0.2.1'
+const VERSION = '0.3.0'
 
 // ---- tunables ------------------------------------------------------------
 const PRESTART_MS = 2000 // window to press a button for the Send page

@@ -12,8 +12,8 @@ The watch half of Smelliest Pilgrim, for the Amazfit T-Rex 3 (Zepp OS 4, API 3).
   Test connection).
 - `utils/` sender (chunked, resumable, CRC-checked), protocol, storage, codec.
 
-Build: `npm install && zeus build` (Zeus CLI 1.9+). `app.json` has a placeholder
-appId; a store build needs the appId from the Zepp developer console.
+Build: `npm install && zeus build` (Zeus CLI 1.9+). `app.json` has
+appId 1138450 (the Zepp store listing). Your own fork needs its own appId from the Zepp developer console.
 
 Tests (no watch needed) run from the repository root: `./run_tests.sh`, plus
 `node watch/test/settings-check.mjs`.

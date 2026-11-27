@@ -95,7 +95,7 @@ ok(d1.base === 'https://m.example.workers.dev' && d1.token === 'abc', 'JSON-quot
 
 // ---- ping
 const ping = await call(SERVER, { method: 'ping', params: {} })
-ok(ping.ok && ping.offsets === true && ping.dest === 'server' && ping.app === 'WatchMemo', 'ping over the Side Service reaches the server: ' + JSON.stringify(ping))
+ok(ping.ok && ping.offsets === true && ping.dest === 'server' && ping.app === 'Smelliest Pilgrim' && ping.protocol === 'WatchMemo', 'ping over the Side Service reaches the server: ' + JSON.stringify(ping))
 const bad = await call({ ...SERVER, serverToken: 'wrong-token-wrong-token' }, { method: 'ping', params: {} })
 ok(!bad.ok && bad.status === 401 && /refused the token/.test(bad.error), 'wrong token: 401, watch shows "' + bad.error + '"')
 const noUrl = await call({ dest: 'server' }, { method: 'ping', params: {} })
