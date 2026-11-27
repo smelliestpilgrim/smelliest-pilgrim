@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="probe.share" android:versionCode="1" android:versionName="1">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="32"/>
+  <application android:label="Share probe">
+    <activity android:name="probe.Recv" android:exported="true" android:label="Share probe (test)">
+      <intent-filter><action android:name="android.intent.action.SEND"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="application/zip"/></intent-filter>
+    </activity>
+  </application>
+</manifest>

@@ -1,0 +1,73 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 1100002,
+    "appName": "Smelliest Pilgrim",
+    "appType": "app",
+    "version": {
+      "code": 7,
+      "name": "0.2.1"
+    },
+    "icon": "icon.png",
+    "vender": "smilingpilgrim",
+    "description": "Smelliest Pilgrim: a voice-memo trail journal for pilgrims and thru-hikers. GPS-tagged memos, sent to the phone app or your own server."
+  },
+  "permissions": [
+    "data:os.mic.record",
+    "device:os.mic",
+    "device:os.geolocation",
+    "device:os.local_storage",
+    "data:os.device.info"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.0",
+      "target": "4.0",
+      "minVersion": "3.0"
+    }
+  },
+  "targets": {
+    "trex3": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/index",
+            "page/menu",
+            "page/log"
+          ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
+        }
+      },
+      "platforms": [
+        {
+          "name": "trex3",
+          "deviceSource": 8716544
+        },
+        {
+          "name": "trex3",
+          "deviceSource": 8716545
+        },
+        {
+          "name": "trex3",
+          "deviceSource": 8716547
+        }
+      ],
+      "designWidth": 480
+    }
+  },
+  "i18n": {
+    "en-US": {
+      "appName": "Smelliest Pilgrim"
+    },
+    "es-ES": {
+      "appName": "Smelliest Pilgrim"
+    }
+  },
+  "defaultLanguage": "en-US",
+  "debug": false
+}

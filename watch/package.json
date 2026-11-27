@@ -1,0 +1,14 @@
+{
+  "name": "smelliest-pilgrim-watch",
+  "version": "0.2.1",
+  "description": "Smelliest Pilgrim for Amazfit T-Rex 3 (Zepp OS): voice-memo trail journal with GPS tags",
+  "main": "app.js",
+  "private": true,
+  "type": "commonjs",
+  "devDependencies": {
+    "@zeppos/device-types": "^3.0.0"
+  },
+  "dependencies": {
+    "@zeppos/zml": "^0.0.9"
+  }
+}

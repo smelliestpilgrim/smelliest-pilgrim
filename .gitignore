@@ -1,0 +1,19 @@
+# build output
+build/
+dist/
+*.apk
+*.idsig
+*.zab
+*.zpk
+# signing keys and secrets never go in the repository
+*.keystore
+*.jks
+keystore.properties
+.dev.vars
+.env
+# local tooling and test output
+node_modules/
+.wrangler/
+test-output/
+*.log
+.DS_Store

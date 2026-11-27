@@ -1,0 +1,43 @@
+# Smelliest Pilgrim server: Cloudflare Worker + D1 (free plan, no card needed).
+# Nothing here is deployed yet. See README.md for the one-time setup.
+name = "smelliest-pilgrim"
+main = "src/index.js"
+compatibility_date = "2026-11-01"
+
+# The memo page (index.html, app.js, opus.js). It holds no data: every memo
+# is fetched from /api/* with the bearer token.
+[assets]
+directory = "./public"
+
+[vars]
+TIMEZONE = "Europe/Madrid"   # used for "today" counts and log names
+
+[[d1_databases]]
+binding = "DB"
+database_name = "smelliest-pilgrim"
+database_id = "00000000-0000-0000-0000-000000000000"   # replace with the id from `wrangler d1 create smelliest-pilgrim`
+migrations_dir = "migrations"
+
+# Daily clean-up of chunks from memos that never got committed (older than 7 days).
+[triggers]
+crons = ["17 3 * * *"]
+
+# The token is a secret, never in this file:  npx wrangler secret put TOKEN
+
+# ---------------------------------------------------------------------------
+# Demo copy for the Zepp store reviewer: same code, its own empty database and
+# its own token, wiped of anything older than 24 h every night. Your real
+# memos are never reachable with the demo token.
+#   npx wrangler d1 create smelliest-pilgrim-demo        (put the id below)
+#   npx wrangler d1 migrations apply smelliest-pilgrim-demo --remote --env demo
+#   npx wrangler secret put TOKEN --env demo
+#   npx wrangler deploy --env demo
+[env.demo]
+name = "smelliest-pilgrim-demo"
+vars = { TIMEZONE = "Europe/Madrid", DEMO = "true" }
+
+[[env.demo.d1_databases]]
+binding = "DB"
+database_name = "smelliest-pilgrim-demo"
+database_id = "00000000-0000-0000-0000-000000000001"   # replace with the id from `wrangler d1 create smelliest-pilgrim-demo`
+migrations_dir = "migrations"
