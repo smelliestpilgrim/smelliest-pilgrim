@@ -377,7 +377,7 @@ export function sendMemo(io, memo, onProgress, cb, onRetry, ctx) {
 // Sends every unsent memo, oldest first, one after another.
 // onEvent({ type: 'memo'|'progress'|'retry'|'sent'|'failed'|'done', ... })
 export function sendAll(io, memos, onEvent) {
-  const todo = memos.filter((m) => !m.sent && !m.skip && m.bytes > 0).sort((a, b) => a.id - b.id)
+  const todo = memos.filter((m) => !m.sent && m.bytes > 0).sort((a, b) => a.id - b.id)
   const total = todo.length
   const totalBytes = todo.reduce((s, m) => s + m.bytes, 0)
   const t0 = io.now()

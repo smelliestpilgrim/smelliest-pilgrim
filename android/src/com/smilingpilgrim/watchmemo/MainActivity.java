@@ -34,10 +34,9 @@ import java.util.*;
  * High-contrast layout: white on black, nothing coded by colour alone; a small title at the top,
  * content and big buttons in the middle and bottom of the screen.
  */
-public class MainActivity extends Activity implements MemoService.Listener {
+public class MainActivity extends Activity implements Receiver.Ui {
     private static final int WHITE = Color.WHITE, SOFT = 0xFFDDDDDD, DIM = 0xFFAAAAAA;
-    private Http http;
-    private MemoService service;
+    private Receiver rx; // 0.2.4: owned by App, outlives this Activity (item 12)
     private Library lib;
     private Places places;
     private SharedPreferences prefs;
@@ -47,51 +46,35 @@ public class MainActivity extends Activity implements MemoService.Listener {
     private FrameLayout content;
     private LinearLayout buttons;
     private String openDay = null;          // null = list of days
-    private int sessionCount = 0;
-    private String serverState = "Starting…";
     private MediaPlayer player; private String playingFile; private Button playingBtn; private TextView playingInfo; private PlotView plot;
-    private volatile boolean ready = false;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         prefs = getSharedPreferences("ui", MODE_PRIVATE);
-        SharedFolder shared = Build.VERSION.SDK_INT >= 29 ? new MediaStoreShared(this)
-                : new FileShared(new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), Protocol.ROOT));
-        lib = new Library(getFilesDir(), shared, this::onLog);
-        service = new MemoService(lib, TimeZone.getDefault(), this);
+        rx = ((App) getApplication()).receiver();
+        lib = rx.lib();
         places = new Places(this, () -> ui(this::refresh));
         buildFrame();
         if (Build.VERSION.SDK_INT < 29 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
         }
+        rx.attach(this);
         showList();
-        new Thread(() -> {
-            // Import 0.1.x folders and repair zips first, then open the receiver: never both at once.
-            try {
-                if (!lib.shared().oldDays().isEmpty()) { serverState = "Importing old folders…"; ui(this::updateStatus); }
-                new Migration(lib, TimeZone.getDefault(), this::onLog).run();
-                lib.heal();
-            } catch (Exception e) { onLog("startup: " + e); }
-            ready = true;
-            ui(this::refresh);
-            startServer();
-        }, "startup").start();
+        // Import 0.1.x folders and repair zips first, then open the receiver: never both at once.
+        // Runs once per process; a re-created Activity finds the receiver already running.
+        rx.start(r -> {
+            if (!lib.shared().oldDays().isEmpty()) r.setState("Importing old folders…");
+            new Migration(lib, TimeZone.getDefault(), r::onLog).run();
+            lib.heal();
+        });
     }
 
-    private void startServer() {
-        http = new Http(service, Protocol.PORT);
-        try {
-            http.start();
-            serverState = "Receiver ready";
-        } catch (Exception e) {
-            serverState = "RECEIVER FAILED: " + e.getMessage() + " – close the app from Recents and reopen";
-        }
-        ui(this::updateStatus);
-    }
+    @Override public void onState() { ui(() -> { refresh(); updateStatus(); }); }
 
     @Override protected void onDestroy() {
-        if (http != null) http.stop();
+        // 0.2.4: the receiver is NOT stopped here; it lives as long as the process (item 12).
+        rx.detach(this);
         stopPlayer();
         super.onDestroy();
     }
@@ -126,8 +109,8 @@ public class MainActivity extends Activity implements MemoService.Listener {
 
     private void updateStatus() {
         int today = 0;
-        try { today = service.today().entries.size(); } catch (Exception ignored) {}
-        status.setText(serverState + " · received now: " + sessionCount + " · today: " + today);
+        try { today = rx.service().today().entries.size(); } catch (Exception ignored) {}
+        status.setText(rx.state() + " · received now: " + rx.sessionCount() + " · today: " + today);
     }
 
     private void refresh() { if (openDay == null) showList(); else showDay(openDay); }
@@ -141,7 +124,7 @@ public class MainActivity extends Activity implements MemoService.Listener {
         LinearLayout l = column(sv);
         List<String> days = lib.days();
         if (days.isEmpty()) {
-            text(l, 22, WHITE, false, ready ? "No memos yet.\n\nKeep this app open, then on the watch press your Memo button and SEND ALL."
+            text(l, 22, WHITE, false, rx.ready() ? "No memos yet.\n\nKeep this app open, then on the watch press your Memo button and SEND ALL."
                     : "Loading…");
         }
         boolean towns = prefs.getBoolean("towns", false);
@@ -386,7 +369,6 @@ public class MainActivity extends Activity implements MemoService.Listener {
     // ---------- receiver callbacks ----------
     @Override public void onSaved(Entry e, int today, boolean duplicate) {
         ui(() -> {
-            if (!duplicate) sessionCount++;
             if (openDay == null || player == null) refresh(); else updateStatus();
         });
     }

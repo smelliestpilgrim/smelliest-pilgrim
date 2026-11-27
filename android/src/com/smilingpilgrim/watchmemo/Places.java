@@ -17,7 +17,8 @@ final class Places {
     interface Done { void changed(); }
     private final File cache;
     private final Map<String, String> map = new HashMap<>();
-    private final Set<String> asked = new HashSet<>();
+    /** Failed lookups (offline, service error) are asked again after RetryGate.RETRY_MS; answers, even "no town", are cached. */
+    private final com.smilingpilgrim.watchmemo.core.RetryGate asked = new com.smilingpilgrim.watchmemo.core.RetryGate();
     private final ExecutorService ex = Executors.newSingleThreadExecutor();
     private final Context ctx;
     private final Done done;
@@ -36,7 +37,7 @@ final class Places {
         String k = key(lat, lon);
         String n = map.get(k);
         if (n != null) return n.isEmpty() ? null : n;
-        if (lookup && Geocoder.isPresent() && asked.add(k)) ex.execute(() -> fetch(k, lat, lon));
+        if (lookup && Geocoder.isPresent() && asked.start(k, System.currentTimeMillis())) ex.execute(() -> fetch(k, lat, lon));
         return null;
     }
 
@@ -49,7 +50,8 @@ final class Places {
                 Address ad = a.get(0);
                 n = ad.getLocality() != null ? ad.getLocality() : ad.getSubAdminArea() != null ? ad.getSubAdminArea() : "";
             }
-        } catch (Exception e) { return; } // offline: try again another time
+        } catch (Exception e) { asked.failed(k, System.currentTimeMillis()); return; } // offline: try again after RETRY_MS
+        asked.done(k);
         synchronized (this) {
             map.put(k, n);
             try (Writer w = new OutputStreamWriter(new FileOutputStream(cache, true), StandardCharsets.UTF_8)) { w.write(k + "\t" + n + "\n"); }

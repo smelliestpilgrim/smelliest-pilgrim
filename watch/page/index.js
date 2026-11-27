@@ -1,4 +1,5 @@
-// Memo 0.1.4 (record page unchanged since 0.1.3): record page, rebuilt defensively after two watch reboots.
+// Smelliest Pilgrim 0.3.2 record page (formerly Memo 0.1.4; unchanged since 0.1.3 except the GPS limit below),
+// rebuilt defensively after two watch reboots.
 //
 //   launch            -> "press a button or tap SEND" for PRESTART_MS (2 s).
 //                        Nothing is running yet: a single click, or a tap on
@@ -10,6 +11,8 @@
 //                        STAT_DELAY_MS later.
 //   fix already/later -> four quick buzzes, everything stopped, app exits.
 //   no fix after GPS_WAIT_AFTER_STOP_MS -> saved as "no fix", long buzz, exit.
+//   (0.3.2) and never more than GPS_TOTAL_MS of searching counted from rec start,
+//   but always at least GPS_MIN_AFTER_STOP_MS after stop -> "SAVED, NO GPS".
 //   single UP click while waiting for GPS -> give up, saved as "no fix", exit.
 //   No long presses anywhere: they are left to the watch's own shortcuts.
 //
@@ -43,13 +46,20 @@ import { blog } from '../utils/blog'
 // NOTE: never `export` anything from a page file. The bundler then emits
 // `exports.X = ...`, and `exports` does not exist on the watch: the page dies
 // before Page() registers (0.1.1 black-screen bug).
-const VERSION = '0.3.0'
+const VERSION = '0.3.2'
 
 // ---- tunables ------------------------------------------------------------
 const PRESTART_MS = 2000 // window to press a button for the Send page
 const KEY_GUARD_MS = 400 // ignore keys this soon after launch (the launch press)
 const GPS_WAIT_AFTER_STOP_MS = 3 * 60 * 1000 // give up on GPS this long after stop
 const MAX_RECORD_MS = 10 * 60 * 1000 // auto-stop a forgotten recording
+// 0.3.2: GPS search limit counted from the start of the recording. GPS already searches the whole
+// time you talk; nothing waits for it while recording, and the memo is written at stop whatever
+// happens. Only the wait AFTER stop is shortened: total search <= 5 min, but never less than 60 s
+// after stop. Memos up to 2 min long keep the full 3 min wait (unchanged); a 10 min memo with no fix
+// waits 60 s instead of 3 min. No new native GPS call: the same finish() path as the 3 min limit.
+const GPS_TOTAL_MS = 5 * 60 * 1000
+const GPS_MIN_AFTER_STOP_MS = 60 * 1000
 const STAT_DELAY_MS = 600 // one size check this long after recorder.stop()
 const STAT_RETRY_MS = 2000 // one more check if the first saw 0 bytes
 const EXIT_DELAY_MS = 2000 // let the last buzz (1.2 s) finish before exit
@@ -229,8 +239,9 @@ Page(
         const waited = now - s.recStopped
         this.show('timer', this.wTimer, Math.round(waited / 1000) + ' s')
         this.show('gps', this.wGps, this.gpsLine())
+        const limit = Math.min(GPS_WAIT_AFTER_STOP_MS, Math.max(GPS_MIN_AFTER_STOP_MS, GPS_TOTAL_MS - (s.recStopped - s.recStarted)))
         if (s.fix) this.finish(true)
-        else if (waited >= GPS_WAIT_AFTER_STOP_MS) this.finish(false, 'no fix after ' + Math.round(GPS_WAIT_AFTER_STOP_MS / 1000) + ' s')
+        else if (waited >= limit) this.finish(false, 'no fix after ' + Math.round(waited / 1000) + ' s' + (limit < GPS_WAIT_AFTER_STOP_MS ? ' (GPS searched ' + Math.round((now - s.recStarted) / 1000) + ' s in all, limit ' + GPS_TOTAL_MS / 60000 + ' min)' : ''))
         else if (Math.round(waited / 1000) % 15 === 0) blog('waiting ' + Math.round(waited / 1000) + 's changes=' + s.geoChanges)
       }
     },

@@ -6,6 +6,8 @@
 # MEMOS=<dir> replays your own day folder from the phone app instead.
 set -e
 cd "$(dirname "$0")/.."
+echo "== unit tests (in-process, node:sqlite)"
+node test/unit.mjs
 export WRANGLER_SEND_METRICS=false
 export TOKEN=local-test-token-$(head -c 12 /dev/urandom | od -An -tx1 | tr -d ' \n')
 T=$(mktemp -d)

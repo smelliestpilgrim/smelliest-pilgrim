@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.smilingpilgrim.watchmemo" android:versionCode="6" android:versionName="0.2.3">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.smilingpilgrim.watchmemo" android:versionCode="7" android:versionName="0.2.4">
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="32"/>
   <!-- Needed for any socket, even 127.0.0.1. Nothing goes to the internet. -->
   <uses-permission android:name="android.permission.INTERNET"/>
   <!-- Only Android 8/9 need this to write the day zips to Documents; 10+ use MediaStore with no permission. -->
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28"/>
-  <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:allowBackup="false">
+  <application android:name=".App" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:allowBackup="false">
     <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:theme="@android:style/Theme.Material.NoActionBar" android:configChanges="orientation|screenSize|keyboardHidden">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>

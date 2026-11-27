@@ -12,6 +12,14 @@ public final class Http implements Runnable {
     private volatile ServerSocket socket;
     private volatile boolean running;
     private Thread thread;
+    /**
+     * At most this many connections are served at once. One watch sends one request at a time
+     * (ping, chunk, commit and log part are sequential in sender.js); 8 leaves room for a retry
+     * that overlaps a timed-out request and a Settings "Test connection". More than that is not
+     * our watch: it is answered 503 at once and closed, so a flood cannot exhaust the phone.
+     */
+    public static final int MAX_CONNECTIONS = 8;
+    private final java.util.concurrent.Semaphore slots = new java.util.concurrent.Semaphore(MAX_CONNECTIONS);
 
     public Http(MemoService service, int port) { this.service = service; this.port = port; }
 
@@ -40,9 +48,24 @@ public final class Http implements Runnable {
             Socket c;
             try { c = socket.accept(); } catch (IOException e) { break; }
             final Socket conn = c;
-            new Thread(() -> serve(conn), "watchmemo-conn").start();
+            if (!slots.tryAcquire()) { busy(conn); continue; }
+            try {
+                new Thread(() -> { try { serve(conn); } finally { slots.release(); } }, "watchmemo-conn").start();
+            } catch (Throwable t) { slots.release(); try { conn.close(); } catch (IOException ignored) {} }
         }
     }
+
+    /** Over the limit: a short 503 from the accept thread, never blocking it for long. */
+    private void busy(Socket c) {
+        try (Socket s = c) {
+            s.setSoTimeout(1000);
+            respond(s, 503, "{\"ok\":false,\"error\":\"busy: too many connections\"}");
+        } catch (Exception ignored) {}
+        service.note("refused a connection: " + MAX_CONNECTIONS + " already open");
+    }
+
+    /** Connections being served right now (tests). */
+    public int active() { return MAX_CONNECTIONS - slots.availablePermits(); }
 
     void serve(Socket c) {
         try (Socket s = c) {
@@ -56,7 +79,16 @@ public final class Http implements Runnable {
             String h;
             while ((h = readLine(in)) != null && !h.isEmpty()) {
                 int k = h.indexOf(':');
-                if (k > 0 && h.substring(0, k).trim().equalsIgnoreCase("content-length")) len = Integer.parseInt(h.substring(k + 1).trim());
+                if (k > 0 && h.substring(0, k).trim().equalsIgnoreCase("content-length")) {
+                    String v = h.substring(k + 1).trim();
+                    try { len = Integer.parseInt(v); }
+                    catch (NumberFormatException e) {
+                        String shown = v.length() > 40 ? v.substring(0, 40) + "..." : v;
+                        service.note("refused: bad Content-Length " + q(shown) + " on " + rl[0] + " " + rl[1].split("\\?")[0]);
+                        respond(s, 400, "{\"ok\":false,\"error\":\"bad content-length\"}");
+                        return;
+                    }
+                }
             }
             if (len < 0 || len > Protocol.MAX_BODY) { respond(s, 413, "{\"ok\":false,\"error\":\"body too big\"}"); return; }
             byte[] body = new byte[len];

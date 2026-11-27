@@ -70,7 +70,12 @@ final class MediaStoreShared implements SharedFolder {
 
     @Override public long size(String name) {
         List<Uri> u = find(REL, name);
-        return u.isEmpty() ? -1 : statSize(u.get(0));
+        if (u.isEmpty()) return -1;
+        // Duplicate rows (a publish interrupted between insert and delete): use the newest, the
+        // one publish() wrote last; the next publish() removes the others.
+        long[] ids = new long[u.size()];
+        for (int i = 0; i < ids.length; i++) ids[i] = Long.parseLong(u.get(i).getLastPathSegment());
+        return statSize(u.get(SharedFolder.newest(ids)));
     }
 
     @Override public List<String> oldDays() {

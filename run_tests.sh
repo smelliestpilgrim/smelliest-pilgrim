@@ -1,7 +1,8 @@
 #!/bin/bash
 # Phone app + watch app tests, no devices needed: Ogg repacking, the phone app's
 # server logic in the JVM, and the watch's sender + Side Service relay talking to
-# it over 127.0.0.1. Needs JDK 17, Node 20+, ffmpeg, python3. Server tests: server/test/run.sh
+# it over 127.0.0.1, then the Cloudflare server tests (server/test/run.sh; needs
+# 'cd server && npm ci' and Chrome, or SKIP_SERVER=1). Needs JDK 17, Node 20+, ffmpeg, python3.
 set -e; cd "$(dirname "$0")"
 [ -x "${JAVA_HOME:-/nonexistent}/bin/javac" ] || JAVA_HOME=$HOME/jdk17; export PATH=$JAVA_HOME/bin:$PATH
 T=$(mktemp -d); trap 'kill $SRV 2>/dev/null || true; rm -rf "$T"' EXIT
@@ -19,6 +20,8 @@ for n in m20 m60 long trunc; do
 done
 echo "== phone storage: zips, atomic rebuild, migration, dedupe (JVM)"
 java -cp "$T/cls" TestMain unit "$T/data" "$T/unit"
+echo "== 27 Nov 2026 fixes: pending expiry, connection limit, Content-Length, OggCheck, TSV safety (JVM)"
+java -cp "$T/cls" FixTests "$T/data" "$T/fix"
 echo "== crash test: kill -9 the app at random moments while it rewrites the zip"
 for round in 1 2 3 4 5 6 7 8; do
   java -cp "$T/cls" TestMain stress "$T/data" "$T/stress" > "$T/stress.log" 2>&1 & ST=$!
@@ -53,5 +56,12 @@ rm -rf "$T/z" && mkdir "$T/z" && (cd "$T/z" && unzip -q "$Z") && ls -la "$T/z"
 for f in "$T/z"/*.ogg; do printf '%s ' "$(basename "$f")"; ffprobe -v error -show_entries format=duration -of csv=p=0 "$f"; ffmpeg -v error -err_detect crccheck+explode -i "$f" -f null -; done
 [ -z "$(ls -A "$T/state/raw")" ] && echo "no raw copies left in private storage (all .ogg verified)"
 cat "$T/z/day.md"
-mkdir -p test-output && rm -rf test-output/phone && mkdir -p test-output/phone && cp "$Z" test-output/android/ && cp -r "$T/z" test-output/android/unzipped && cp "$T/server.log" test-output/server.log
+mkdir -p test-output && rm -rf test-output/phone && mkdir -p test-output/phone && cp "$Z" test-output/phone/ && cp -r "$T/z" test-output/phone/unzipped && cp "$T/server.log" test-output/server.log
+# a failed copy inside an && chain does not trip set -e, so check the result explicitly
+[ -f "test-output/phone/$(basename "$Z")" ] && [ -f test-output/phone/unzipped/day.md ] || { echo "FAIL: phone output not saved in test-output/phone/"; exit 1; }
+if [ "${SKIP_SERVER:-0}" = 1 ]; then echo "== Cloudflare server tests SKIPPED (SKIP_SERVER=1)"; else
+  echo "== Cloudflare server (server/test/run.sh: unit tests, wrangler dev --local replay, memo page)"
+  [ -x server/node_modules/.bin/wrangler ] || { echo "FAIL: run 'cd server && npm ci' first (or SKIP_SERVER=1 to skip the server tests)"; exit 1; }
+  bash server/test/run.sh
+fi
 echo "ALL TESTS PASSED"

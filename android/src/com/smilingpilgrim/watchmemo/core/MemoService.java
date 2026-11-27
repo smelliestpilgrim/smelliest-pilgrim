@@ -26,6 +26,41 @@ public final class MemoService {
     /** 0.2.2: chunks stored by byte offset; a resend at the same offset overwrites. */
     private final Map<String, TreeMap<Long, byte[]>> pendingOff = new HashMap<>();
     private final TimeZone defaultTz;
+    /**
+     * Pending chunks of a memo (and log parts) untouched for this long are dropped. The watch
+     * gives up a step after 3 minutes without progress (STALL_LIMIT_MS), so a live send touches its
+     * memo at least every 3 minutes and can never expire; 30 minutes (10x that) still lets a send
+     * that gave up be resumed on the next press, from where it stopped. After expiry the watch's
+     * commit gets "missing bytes"/"no chunks received" and it restarts that memo from byte 0
+     * (sender.js restart()), so nothing is lost; the memo stays on the watch until confirmed.
+     */
+    public static final long PENDING_IDLE_MS = 30L * 60 * 1000;
+    private final Map<String, Long> touched = new HashMap<>();
+    private java.util.function.LongSupplier clock = System::currentTimeMillis;
+
+    /** Tests only: a fake clock for the pending-chunk expiry. */
+    public void setClock(java.util.function.LongSupplier c) { clock = c; }
+
+    /** Number of memos/logs with chunks held in memory (tests and diagnostics). */
+    public synchronized int pendingCount() { return touched.size(); }
+
+    private void touch(String key) { touched.put(key, clock.getAsLong()); }
+
+    private void expire() {
+        long cutoff = clock.getAsLong() - PENDING_IDLE_MS;
+        for (Iterator<Map.Entry<String, Long>> it = touched.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<String, Long> x = it.next();
+            if (x.getValue() >= cutoff) continue;
+            String k = x.getKey();
+            it.remove();
+            if (k.startsWith("log:")) logs.remove(k.substring(4));
+            else { pending.remove(k); pendingOff.remove(k); }
+            log("dropped unfinished upload " + k + " (no chunk for " + PENDING_IDLE_MS / 60000 + " min); a resend starts from byte 0");
+        }
+    }
+
+    /** Package use (Http): a line for the app log. */
+    void note(String s) { log(s); }
 
     public MemoService(Library lib, TimeZone defaultTz, Listener l) {
         this.lib = lib; this.defaultTz = defaultTz; this.listener = l;
@@ -40,6 +75,7 @@ public final class MemoService {
 
     public synchronized Reply handle(String method, String path, Map<String, String> query, byte[] body) {
         try {
+            expire();
             if ("GET".equals(method) && "/ping".equals(path)) {
                 return ok("\"today\":" + today().entries.size() + ",\"app\":\"WatchMemo\",\"ver\":\"" + Protocol.VERSION + "\",\"offsets\":true,\"maxChunk\":" + Protocol.MAX_CHUNK_BYTES);
             }
@@ -65,6 +101,7 @@ public final class MemoService {
         byte[][] parts = pending.get(id);
         if (parts == null || parts.length != n) { parts = new byte[n][]; pending.put(id, parts); }
         parts[i] = data;
+        touch(id);
         return ok("\"i\":" + i);
     }
 
@@ -78,6 +115,7 @@ public final class MemoService {
         TreeMap<Long, byte[]> parts = pendingOff.get(id);
         if (parts == null) { parts = new TreeMap<>(); pendingOff.put(id, parts); }
         parts.put(o, data);
+        touch(id);
         return ok("\"i\":" + i + ",\"o\":" + o + ",\"len\":" + data.length);
     }
 
@@ -110,12 +148,14 @@ public final class MemoService {
         byte[][] parts = logs.get(id);
         if (parts == null || parts.length != n) { parts = new byte[n][]; logs.put(id, parts); }
         parts[i] = data;
+        touch("log:" + id);
         int total = 0;
         for (byte[] p : parts) { if (p == null) return ok("\"i\":" + i + ",\"done\":false"); total += p.length; }
         byte[] all = new byte[total];
         int o = 0;
         for (byte[] p : parts) { System.arraycopy(p, 0, all, o, p.length); o += p.length; }
         logs.remove(id);
+        touched.remove("log:" + id);
         long now = System.currentTimeMillis();
         String day = fmt("yyyy-MM-dd", now, defaultTz);
         String name = "watch-log-" + fmt("HHmmss", now, defaultTz) + ".txt";
@@ -140,7 +180,7 @@ public final class MemoService {
         Entry prev = log.find(id);
         if (prev != null) { // already saved (e.g. the watch never got our first reply)
             pending.remove(id);
-            pendingOff.remove(id);
+            pendingOff.remove(id); touched.remove(id);
             if (prev.size == wantSize && prev.crc == wantCrc) {
                 log("memo " + prev.file + " arrived again, already saved");
                 if (listener != null) listener.onSaved(prev, today().entries.size(), true);
@@ -155,7 +195,7 @@ public final class MemoService {
             StringBuilder problem = new StringBuilder();
             raw = assemble(offParts, wantSize, problem);
             if (raw == null) {
-                if (problem.toString().startsWith("size/crc mismatch")) pendingOff.remove(id);
+                if (problem.toString().startsWith("size/crc mismatch")) { pendingOff.remove(id); if (!pending.containsKey(id)) touched.remove(id); }
                 return err(409, problem.toString());
             }
         } else {
@@ -175,7 +215,7 @@ public final class MemoService {
         CRC32 c = new CRC32(); c.update(raw, 0, raw.length);
         if (raw.length != wantSize || c.getValue() != wantCrc) {
             pending.remove(id);
-            pendingOff.remove(id);
+            pendingOff.remove(id); touched.remove(id);
             return err(409, "size/crc mismatch: got " + raw.length + "/" + c.getValue() + ", watch said " + wantSize + "/" + wantCrc);
         }
 
@@ -218,7 +258,7 @@ public final class MemoService {
         }
         log.add(e);
         pending.remove(id);
-        pendingOff.remove(id);
+        pendingOff.remove(id); touched.remove(id);
         rebuild(day);
         log("saved " + e.file + " (" + Entry.dur(e.audioMs) + ", " + (e.fix ? "GPS ok" : "no GPS") + ")");
         if (listener != null) listener.onSaved(e, today().entries.size(), false);

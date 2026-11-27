@@ -32,7 +32,7 @@ public final class Library {
     public static boolean isDay(String s) { return s != null && s.matches("\\d{4}-\\d{2}-\\d{2}"); }
     public static String zipName(String day) { return "WatchMemos_" + day + ".zip"; }
 
-    public DayLog day(String day) { return new DayLog(daysDir, day); }
+    public DayLog day(String day) { return new DayLog(daysDir, day, log); }
     public File memoDir(String day) { return new File(memosDir, day); }
     public File audio(String day, String name) { return new File(memoDir(day), name); }
     public File rawFile(String id) { return new File(rawDir, id + ".zeppopus"); }

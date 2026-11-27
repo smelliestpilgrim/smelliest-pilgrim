@@ -24,7 +24,7 @@ import { sendAll, sendText, requestWithTimeout, linkHint, linkKind } from '../ut
 import { PING_TIMEOUT_MS, CHUNK_SIZES, DEFAULT_CHUNK, chunkLabel } from '../utils/protocol'
 import { blog, logBytes } from '../utils/blog'
 
-const VERSION = '0.3.0' // local const only: page files must never export
+const VERSION = '0.3.2' // local const only: page files must never export
 const WHITE = 0xffffff
 const GREY = 0xb0b0b0
 const BTN = 0x1f5fbf
@@ -162,7 +162,7 @@ Page(
       let all = []
       try { all = listMemos() } catch (e) { blog('list err ' + e) }
       this.memos = all
-      const unsent = all.filter((m) => !m.sent && !m.skip && m.bytes > 0)
+      const unsent = all.filter((m) => !m.sent && m.bytes > 0)
       const sent = all.filter((m) => m.sent)
       const bytes = unsent.reduce((s, m) => s + m.bytes, 0)
       this.set(this.wCount, unsent.length ? unsent.length + ' to send, ' + kb(bytes) : 'nothing to send')

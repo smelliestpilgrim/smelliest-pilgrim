@@ -15,7 +15,7 @@
 // A memo only counts as saved when every byte arrived and size + CRC-32 match
 // what the watch computed, exactly as on the phone.
 
-const VERSION = '0.3.0-server'
+const VERSION = '0.3.2-server'
 const MAX_CHUNK_BYTES = 48 * 1024
 const MAX_MEMO_BYTES = 32 * 1024 * 1024
 const MAX_CHUNKS = 16384
@@ -43,7 +43,7 @@ export function crc32(bytes) {
   return (c ^ 0xffffffff) >>> 0
 }
 
-function b64decode(s) {
+export function b64decode(s) {
   const t = s.trim()
   if (!/^[A-Za-z0-9+/]*={0,2}$/.test(t) || t.length % 4 === 1) throw new Error('bad base64')
   const bin = atob(t)
@@ -75,7 +75,7 @@ const pad2 = (n) => (n < 10 ? '0' : '') + n
 
 // Local date parts for t (epoch ms): the watch's offset (minutes) when given,
 // otherwise the server's TIMEZONE.
-function localParts(t, tzMin, zone) {
+export function localParts(t, tzMin, zone) {
   if (Number.isFinite(tzMin) && tzMin >= -14 * 60 && tzMin <= 14 * 60) {
     const d = new Date(t + tzMin * 60000)
     return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), s: d.getUTCSeconds() }
@@ -86,13 +86,14 @@ function localParts(t, tzMin, zone) {
 }
 const dayOf = (p) => p.y + '-' + pad2(p.mo) + '-' + pad2(p.d)
 
-function authorised(request, env) {
+export function authorised(request, env) {
   const want = String(env.TOKEN || '')
   const h = request.headers.get('Authorization') || ''
   const got = h.startsWith('Bearer ') ? h.slice(7).trim() : ''
-  if (got.length !== want.length) return false
-  let diff = 0
-  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i)
+  // Same loop, same work, whatever length was sent: a length mismatch is
+  // folded into diff instead of returning early (no length oracle).
+  let diff = got.length ^ want.length
+  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ (got.charCodeAt(i) | 0) // past the end: NaN|0 = 0
   return diff === 0
 }
 
@@ -286,11 +287,14 @@ async function api(request, env, url) {
   }
   m = path.match(/^\/api\/memo\/(\d{1,16})$/)
   if (request.method === 'DELETE' && m) {
+    const memo = await DB.prepare('SELECT 1 AS x FROM memos WHERE id = ?').bind(m[1]).first()
+    if (!memo) return err(404, 'no such memo')
     await DB.batch([DB.prepare('DELETE FROM chunks WHERE memo_id = ?').bind(m[1]), DB.prepare('DELETE FROM memos WHERE id = ?').bind(m[1])])
     return ok({ deleted: m[1] })
   }
   if (request.method === 'GET' && path === '/api/logs') {
     const day = url.searchParams.get('day') || ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return err(400, 'bad day')
     const r = await DB.prepare('SELECT name, length(data) AS bytes FROM logs WHERE day = ? ORDER BY name').bind(day).all()
     return ok({ logs: r.results })
   }
@@ -307,7 +311,16 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     if (!env.TOKEN || String(env.TOKEN).length < 16) return err(503, 'server token not set (npx wrangler secret put TOKEN, at least 16 characters)')
-    if (!authorised(request, env)) return err(401, 'bad token')
+    // 0.3.2 (item 26a): optional per-IP rate limits (Cloudflare rate-limit bindings in
+    // wrangler.toml; without them nothing is limited, e.g. in older deploys or tests).
+    // BAD_TOKEN_RL: 10 wrong-token requests / 60 s per IP, then 429. RL: 600 requests / 60 s
+    // per IP with the right token, far above the watch sender (one request at a time).
+    const ip = request.headers.get('CF-Connecting-IP') || 'local'
+    if (!authorised(request, env)) {
+      if (env.BAD_TOKEN_RL && !(await env.BAD_TOKEN_RL.limit({ key: ip })).success) return err(429, 'too many bad tokens, wait a minute')
+      return err(401, 'bad token')
+    }
+    if (env.RL && !(await env.RL.limit({ key: ip })).success) return err(429, 'too many requests, wait a minute')
     try {
       const p = url.pathname, method = request.method
       if (method === 'GET' && p === '/ping') return await ping(env)

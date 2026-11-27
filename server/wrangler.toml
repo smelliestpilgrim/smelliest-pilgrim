@@ -24,6 +24,19 @@ crons = ["17 3 * * *"]
 
 # The token is a secret, never in this file:  npx wrangler secret put TOKEN
 
+# Per-IP rate limits (0.3.2). Approximate, per Cloudflare location. namespace_id is any
+# integer unique in your account. Wrong token: 10 per minute. Right token: 600 per minute
+# (the watch sends one request at a time; a busy send is well under 300 per minute).
+[[ratelimits]]
+name = "BAD_TOKEN_RL"
+namespace_id = "8761"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "RL"
+namespace_id = "8762"
+simple = { limit = 600, period = 60 }
+
 # ---------------------------------------------------------------------------
 # Demo copy for the Zepp store reviewer: same code, its own empty database and
 # its own token, wiped of anything older than 24 h every night. Your real
@@ -35,6 +48,16 @@ crons = ["17 3 * * *"]
 [env.demo]
 name = "smelliest-pilgrim-demo"
 vars = { TIMEZONE = "Europe/Madrid", DEMO = "true" }
+
+[[env.demo.ratelimits]]
+name = "BAD_TOKEN_RL"
+namespace_id = "8763"
+simple = { limit = 10, period = 60 }
+
+[[env.demo.ratelimits]]
+name = "RL"
+namespace_id = "8764"
+simple = { limit = 600, period = 60 }
 
 [[env.demo.d1_databases]]
 binding = "DB"

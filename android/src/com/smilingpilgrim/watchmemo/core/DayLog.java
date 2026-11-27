@@ -9,19 +9,41 @@ public final class DayLog {
     public final String day;
     public final List<Entry> entries = new ArrayList<>();
     private final File file;
+    /** Lines that are not a memo (fewer columns than Entry.COLS). Kept byte for byte: save() writes them back. */
+    public final List<String> unreadable = new ArrayList<>();
+    /** Set if the .tsv exists but could not be read; save() then refuses to overwrite it. */
+    public String loadError;
+    /** Each problem is logged once per process, not on every load (today() runs on every ping). */
+    private static final Set<String> reported = Collections.synchronizedSet(new HashSet<String>());
 
-    public DayLog(File dir, String day) {
+    public DayLog(File dir, String day) { this(dir, day, null); }
+
+    public DayLog(File dir, String day, Library.Log log) {
         this.day = day;
         this.file = new File(dir, day + ".tsv");
         if (file.exists()) {
+            int no = 0;
             try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = r.readLine()) != null) {
+                    no++;
                     Entry e = Entry.fromLine(line);
                     if (e != null) entries.add(e);
+                    else if (!line.isEmpty()) {
+                        unreadable.add(line);
+                        report(log, day + ".tsv line " + no + " has " + line.split("\t", -1).length + " of " + Entry.COLS.length
+                                + " columns: not shown, kept unchanged in the file (" + Http.q(line.length() > 60 ? line.substring(0, 60) + "..." : line) + ")");
+                    }
                 }
-            } catch (IOException ignored) {}
+            } catch (IOException ex) {
+                loadError = ex.toString();
+                report(log, "could not read " + day + ".tsv after line " + no + ": " + ex + " (memos shown so far: " + entries.size() + "; the file is left as it is)");
+            }
         }
+    }
+
+    private static void report(Library.Log log, String msg) {
+        if (log != null && reported.add(msg)) log.log(msg);
     }
 
     public Entry find(String id) {
@@ -41,11 +63,13 @@ public final class DayLog {
 
     /** Rewrites the .tsv atomically (temp file, then rename). */
     public void save() throws IOException {
+        if (loadError != null) throw new IOException(day + ".tsv could not be read (" + loadError + "), so it is not overwritten");
         entries.sort(Comparator.comparingLong(a -> a.t));
         file.getParentFile().mkdirs();
         File tmp = new File(file.getPath() + ".tmp");
         try (FileOutputStream fo = new FileOutputStream(tmp); Writer w = new OutputStreamWriter(fo, StandardCharsets.UTF_8)) {
             for (Entry x : entries) w.write(x.toLine() + "\n");
+            for (String x : unreadable) w.write(x + "\n"); // never dropped or "repaired"
             w.flush();
             fo.getFD().sync();
         }

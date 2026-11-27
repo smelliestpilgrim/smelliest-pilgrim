@@ -106,9 +106,11 @@ export function markSent(memo, reply) {
 export function clearConfirmedSent() {
   let n = 0
   listMemos().forEach((m) => {
+    // 0.3.2: the old `skip` stub clause is gone. No 0.3.x file ever writes `skip`, and 0.3.x
+    // (appId 1138450) never sees 0.1.x data, so it was dead code that could delete an
+    // unconfirmed file. Only a memo the phone/server confirmed (size echoed) is deleted.
     const confirmed = m.sent === true && m.sentSize > 0 && m.sentSize === m.bytes
-    const stub = m.skip === true && m.recMs < 5000 // hold-to-Send stub, never a memo
-    if (confirmed || stub) {
+    if (confirmed) {
       try {
         rmSync({ path: audioPath(m.id) })
         rmSync({ path: metaPath(m.id) })

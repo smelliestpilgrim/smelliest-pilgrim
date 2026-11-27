@@ -1,6 +1,6 @@
 {
   "name": "smelliest-pilgrim-server",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "Smelliest Pilgrim server: Cloudflare Worker + D1 for your own trail memos",
   "scripts": {
     "dev": "wrangler dev --local",

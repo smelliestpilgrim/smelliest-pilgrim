@@ -23,8 +23,19 @@ public interface SharedFolder {
     String describe();
     /** Replace Documents/WatchMemos/{name} with a copy of src, never leaving a half-written file under that name. */
     void publish(String name, File src) throws IOException;
-    /** Size of Documents/WatchMemos/{name}, or -1 if it isn't there. */
+    /** Size of Documents/WatchMemos/{name}, or -1 if it isn't there. With duplicate rows: the newest one. */
     long size(String name);
+
+    /**
+     * Which of several MediaStore rows with the same name counts: the newest, i.e. the highest _ID
+     * (MediaStore ids only grow, and publish() always inserts the new copy as a new row before it
+     * removes the old ones). -1 if there are none. Deterministic whatever order the query returns.
+     */
+    static int newest(long[] ids) {
+        int best = -1;
+        for (int i = 0; i < ids.length; i++) if (best < 0 || ids[i] > ids[best]) best = i;
+        return best;
+    }
 
     List<String> oldDays();
     List<OldFile> listOld(String day);

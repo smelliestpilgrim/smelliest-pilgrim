@@ -53,7 +53,6 @@ addMemo('m60', 1, { fix: false, lat: null, lon: null, fixS: null, note: 'no fix 
 addMemo('long', 2, { recMs: 75100, scrOff: 1, scrOffMs: 20000, keepOn: false })
 addMemo('trunc', 3, { recMs: 30000, scrOff: 2, note: 'test: cut file' })
 memos.push({ id: base + 999, bytes: 0, sent: false }) // empty recording: must be skipped
-memos.push({ id: base + 998, bytes: 500, skip: true, sent: false }) // hold-to-Send stub: skipped
 
 // --- ping
 const ping = await new Promise((res) => handleRequest(zfetch(PORT), { method: 'ping', params: {} }, (e, r) => res(r)))
@@ -64,7 +63,7 @@ const sent = []
 const events = []
 const done = await new Promise((res) => sendAll(makeIo(PORT, files, sent), memos, (e) => { events.push(e.type); if (e.type === 'done') res(e) }))
 console.log('  send all:', JSON.stringify({ ok: done.ok, failed: done.failed, kbps: done.kbps.toFixed(0) }))
-ok(done.ok === 4 && done.failed === 0, 'all 4 real memos sent, empty + stub skipped')
+ok(done.ok === 4 && done.failed === 0, 'all 4 real memos sent, empty recording skipped')
 ok(sent.every(([id, r]) => r.crc === zlib.crc32(files[id]) && r.size === files[id].length), 'phone echoed matching size+CRC for every memo')
 ok(sent[0][1].file === '1432-05.ogg', 'first memo named 1432-05.ogg (Madrid time): ' + sent[0][1].file)
 ok(events.includes('progress'), 'progress events fired')
@@ -196,7 +195,9 @@ const runAll = (io, list) => new Promise((res) => { const ev = []; sendAll(io, l
 }
 
 // ---------------- 0.1.4: chunk sizes, byte offsets, adaptive fallback ----------------
-ok(ping.offsets === true && ping.ver === '0.2.2' && ping.maxChunk >= 16384, 'WatchMemo 0.2.2 ping says offsets:true, maxChunk ' + ping.maxChunk)
+// the watch keys on offsets:true, never on the exact version string (0.2.2 or later)
+const verAtLeast = (v, w) => { const a = String(v).split('.').map(Number), b = w.split('.').map(Number); for (let i = 0; i < 3; i++) if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i]; return true }
+ok(ping.offsets === true && verAtLeast(ping.ver, '0.2.2') && ping.maxChunk >= 16384, 'WatchMemo ' + ping.ver + ' (0.2.2+) ping says offsets:true, maxChunk ' + ping.maxChunk)
 const longId = memos[2].id
 const mk = (k, src) => { const id = base + 100000 + k * 1000; files[id] = files[src.id]; return { ...src, id, t: id, sent: false } }
 // every offered size, both modes, against the real phone server
@@ -324,6 +325,35 @@ ok(sizeError('timeout after 29 s', 'other') && sizeError('link error: Exceeded m
   io2.request = (d) => { if (d.method === 'chunk') seen.push([d.params.o, Buffer.from(d.params.d, 'base64').length]); return real2(d) }
   const e2 = await new Promise((res) => sendMemo(io2, memo, null, (e, rr) => res([e, rr]), null, makeSizeCtx(5120, true)))
   ok(!e2[0] && e2[1].crc === zlib.crc32(files[memo.id]) && seen[0][0] === 32768 && seen.every(([o, l]) => o >= 32768 && l <= 5120), 'press 2 (5K): resumes at byte 32768 with 5K chunks, phone joins 16K+5K parts, CRC matches')
+}
+
+// 0.3.2 item 22: the watch keeps ONE resume note (localStorage 'resume', exactly as page/menu.js
+// does: loadResume only returns it for the same memo id). Prove the single slot is safe: an
+// overwritten note means a clean restart from byte 0, never a corrupt memo.
+{
+  let slot = ''
+  const single = { loadResume: (id) => { const o = slot ? JSON.parse(slot) : null; return o && o.id === id ? o : null }, saveResume: (id, o) => { slot = o ? JSON.stringify(Object.assign({ id }, o)) : '' } }
+  const A = mk(70, memos[2]), B = mk(71, memos[2]), C = mk(72, memos[2])
+  const dying = () => { const io = warp(makeIo(PORT, files, []), single); const real = io.request; io.request = (d) => (d.method === 'chunk' && d.params.o >= 32768 ? Promise.reject(new Error('ble disconnect')) : real(d)); return io }
+  const run = (io, m, cs) => new Promise((res) => sendMemo(io, m, null, (e, rr) => res([e, rr]), null, makeSizeCtx(cs, true)))
+  await run(dying(), A, 16384)
+  ok(JSON.parse(slot).id === A.id && JSON.parse(slot).off === 32768, 'single slot: A gave up at byte 32768, note is A')
+  await run(dying(), B, 16384)
+  ok(JSON.parse(slot).id === B.id, 'single slot: B gave up too, B overwrote A\'s note')
+  const ioA = warp(makeIo(PORT, files, []), single); const seenA = []; const realA = ioA.request
+  ioA.request = (d) => { if (d.method === 'chunk') seenA.push(d.params.o); return realA(d) }
+  const rA = await run(ioA, A, 10240)
+  ok(!rA[0] && rA[1].crc === zlib.crc32(files[A.id]) && rA[1].size === files[A.id].length && seenA[0] === 0, 'single slot: A (note lost) restarts cleanly from byte 0 with another chunk size; phone CRC + size match')
+  const ioB = warp(makeIo(PORT, files, []), single); const seenB = []; const realB = ioB.request
+  ioB.request = (d) => { if (d.method === 'chunk') seenB.push(d.params.o); return realB(d) }
+  const rB = await run(ioB, B, 5120)
+  ok(!rB[0] && rB[1].crc === zlib.crc32(files[B.id]) && rB[1].size === files[B.id].length && seenB[0] === 0, 'single slot: sending A replaced B\'s note, so B also restarts cleanly from byte 0 and is saved intact')
+  // stale note: says C reached byte 32768, but the phone never got (or lost) those bytes
+  slot = JSON.stringify({ id: C.id, n: 4, i: 2, off: 32768, cs: 16384, mode: 'o', crc: crc32Update(0, files[C.id].subarray(0, 32768)), bytes: files[C.id].length })
+  const ioC = warp(makeIo(PORT, files, []), single)
+  const rC = await run(ioC, C, 16384)
+  ok(!rC[0] && rC[1].crc === zlib.crc32(files[C.id]) && ioC.lines.some((l) => /restarts from chunk 1: missing bytes from offset 0/.test(l)), 'stale note (phone lost the parts): commit refused as missing, memo restarts from byte 0, saved intact')
+  ok(slot === '', 'note cleared after the memo is confirmed')
 }
 
 // a 0.1.3 resume note (2K index chunks) when the phone now does offsets: start again, logged, saved OK
